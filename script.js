@@ -3,6 +3,7 @@ var tree = { name: "tagName", children: []};
 var flat = [];
 var nodeCount = 0;
 var freqs = [];
+var freqsToPlay = [];
 var notes = 'ABCDEFG';
 
 function findNearestFrequency(find) {
@@ -14,17 +15,26 @@ function findNearestFrequency(find) {
     if (freqs[i] > find) { high = i - 1; continue; };
     return freqs[i];
   }
+
+  if(Math.abs(freqs[high] - find) > Math.abs(freqs[low] - find) {
+    return freqs[low];
+  }
+
   return freqs[i];
 };
 
 function generateNameValue(name) {
     var val = 0;
+    
+    if(name === "BR") return val;
+
     for(var i = 0; i < name.length; i++) {
         val += name[i].charCodeAt();
     }
-    
-    val = findNearestFrequency(val);
 
+    val = findNearestFrequency(val);
+        
+    freqsToPlay.push(val);
     return val;
 }
 
@@ -65,7 +75,7 @@ function makeFrequencies() {
     key = "harmonic minor";
   }
 
-  for(var o = 0; o <= 8; o++) {
+  for(var o = 1; o <= 8; o++) {
     var n = Note.fromLatin(root + o);
     var scale = n.scale(key);
     for(var i = 0; i < scale.length; i++) {
@@ -97,14 +107,14 @@ function forEachNode(callback) {
       }
 
       this.modulator = new Triangle(this.audiolet, frequency * 2);
-      this.modulatorMulAdd = new MulAdd(this.audiolet, children * 50,
+      this.modulatorMulAdd = new MulAdd(this.audiolet, frequency - (children * 30),
                                         frequency);
 
       this.gain = new Gain(this.audiolet);
 
-      var release = nodeInfo.children.length / 10;
+      var release = nodeInfo.children.length / 5;
 
-      this.envelope = new PercussiveEnvelope(this.audiolet, 1, 0.1, children / 10, 
+      this.envelope = new PercussiveEnvelope(this.audiolet, 1, 0.1, release, 
         function() {
             this.audiolet.scheduler.addRelative(0, this.remove.bind(this));
         }.bind(this));
@@ -155,7 +165,7 @@ function forEachNode(callback) {
         this.gainEnvMulAdd.connect(this.gain, 0, 1);
         this.gain.connect(this.upMixer);
         this.upMixer.connect(this.outputs[0]);
-    }
+    };
     extend(Kick, AudioletGroup);
 
     var Hat = function(audiolet) {
@@ -184,7 +194,7 @@ function forEachNode(callback) {
         this.gainEnvMulAdd.connect(this.gain, 0, 1);
         this.gain.connect(this.upMixer);
         this.upMixer.connect(this.outputs[0]);
-    }
+    };
     extend(Hat, AudioletGroup);
 
   extend(Synth, AudioletGroup);
@@ -196,7 +206,7 @@ function forEachNode(callback) {
 
         var scheduler = this.audiolet.scheduler;
         var audiolet = this.audiolet;
-        var beat = 0;
+        var beat = 1;
         var beatCount = 0;
         var tempo = 0;
         var note = 0;
@@ -213,34 +223,74 @@ function forEachNode(callback) {
 
       console.log(flat.length);
 
+      var chunkSize = Math.floor(flat.length / 3);
+      var freqPattern = new PSequence(flat.slice(0, chunkSize));
+      var freqPattern2 = new PSequence(flat.slice(chunkSize + 1, chunkSize * 2));
+      var freqPattern3 = new PSequence(flat.slice(chunkSize * 2 + 1));
+      var drumBeat = new PChoose([new PSequence([tempo * 4, tempo, tempo, tempo * 2]),
+                                   new PSequence([tempo * 2, tempo * 2, tempo, tempo * 3]),
+                                   new PSequence([tempo, tempo, tempo, tempo])], Infinity);
+
+      scheduler.play([freqPattern], tempo,
+        function(info) {
+          var synth = new Synth(audiolet, info);
+          synth.connect(audiolet.output);
+        }.bind(that));
+
+      scheduler.play([freqPattern2], tempo / 2,
+        function(info) {
+          var synth = new Synth(audiolet, info);
+          synth.connect(audiolet.output);
+        }.bind(that));
+
+      scheduler.play([freqPattern3], tempo * 2,
+        function(info) {
+          var synth = new Synth(audiolet, info);
+          synth.connect(audiolet.output);
+        }.bind(that));
+
+      scheduler.play([], tempo,
+        function() {
+          var kick = new Kick(audiolet);
+          kick.connect(audiolet.output);
+        }.bind(that));
+
+      scheduler.play([], tempo * 2,
+        function() {
+          var hat = new Hat(audiolet);
+          hat.connect(audiolet.output);
+        }.bind(that));
+
+/*
       forEachNode(function(nodeInfo) {
         beat += tempo;
         beatCount++;
 
         scheduler.addAbsolute(beat, function() {
-            var synth = new Synth(audiolet, nodeInfo);
-            synth.connect(audiolet.output);
+            // var synth = new Synth(audiolet, nodeInfo);
+            //synth.connect(audiolet.output);
         }.bind(that));
 
         if(beatCount % kickBeat === 0) {
           scheduler.addAbsolute(beat + mod, function() {
-            var kick = new Kick(audiolet);
-            kick.connect(audiolet.output);
+            // var kick = new Kick(audiolet);
+            //kick.connect(audiolet.output);
           }.bind(that));
         }
 
         if(beatCount % hatBeat === 0 || extraHat) {
           if(extraBeats) extraHat = !extraHat;
            scheduler.addAbsolute(beat + mod, function() {
-            var hat = new Hat(audiolet);
-            hat.connect(audiolet.output);
+            // var hat = new Hat(audiolet);
+            // hat.connect(audiolet.output);
           }.bind(that));
         }
 
         mod = mod * -1;
 
       });
-    }
+*/
+    };
 
     window.audioletApp = new AudioletApp();
 })();
