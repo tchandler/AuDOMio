@@ -75,6 +75,14 @@ function makeFrequencies() {
     key = "harmonic minor";
   }
 
+  if(document.documentURI.indexOf(".com") === -1) {
+    key = "natural minor";
+  }
+  
+  if(document.documentURI.indexOf(".org") !== -1) {
+    key = "minor pentatonic";
+  }
+
   if(document.documentURI.indexOf(".co.") !== -1) {
     key = "major pentatonic";
   }
