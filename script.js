@@ -32,7 +32,7 @@ function generateNameValue(name) {
         val += name[i].charCodeAt();
     }
 
-    val = findNearestFrequency(val * 2);
+    val = findNearestFrequency(val);
         
     freqsToPlay.push(val);
     return val;
@@ -75,6 +75,10 @@ function makeFrequencies() {
     key = "harmonic minor";
   }
 
+  if(document.documentURI.indexOf(".co.") !== -1) {
+    key = "major pentatonic";
+  }
+
   for(var o = 1; o <= 8; o++) {
     var n = Note.fromLatin(root + o);
     var scale = n.scale(key);
@@ -93,10 +97,9 @@ function forEachNode(callback) {
 
     makeFrequencies();
     console.log(buildTagTree(document.body));
-
+var tempo = 0;
     var Synth = function(audiolet, nodeInfo) {
       var frequency = nodeInfo.nameValue;
-      console.log(frequency);
       var children = nodeInfo.children.length || 1;
       AudioletGroup.apply(this, [audiolet, 0, 1]);
 
@@ -106,34 +109,33 @@ function forEachNode(callback) {
         this.sine = new Saw(this.audiolet, frequency);
       }
 
-      this.modulator = new Triangle(this.audiolet, frequency * 2);
-      this.modulatorMulAdd = new MulAdd(this.audiolet, frequency - (children * 30),
-                                        frequency);
-
       this.gain = new Gain(this.audiolet);
 
-      var release = 0.2 - nodeInfo.children.length / 10;
-      if(this.release < 0.1) release = 0.1;
+      this.modulator = new Triangle(this.audiolet, frequency / 2);
+      this.modulatorMulAdd = new MulAdd(this.audiolet, frequency * children,
+                                        frequency);
 
-      this.envelope = new PercussiveEnvelope(this.audiolet, 1, 0.1, 0.2, 
+
+      var release = tempo / (8 - nodeInfo.children.length % 4);
+
+      this.envelope = new PercussiveEnvelope(this.audiolet, 1, 0.1, release, 
         function() {
             this.audiolet.scheduler.addRelative(0, this.remove.bind(this));
         }.bind(this));
+
+      this.envMulAdd  = new MulAdd(this.audiolet, 0.3, 0);
 
       this.filter = new LowPassFilter(this.audiolet, flat.length);
 
       this.reverb = new Reverb(this.audiolet, 0.33, 0.5, 0.5);
 
 
-        this.crusher = new BitCrusher(this.audiolet, 8);
-
-
       this.modulator.connect(this.modulatorMulAdd);
       this.modulatorMulAdd.connect(this.sine);
-      this.envelope.connect(this.gain, 0, 1);
-      this.crusher.connect(this.gain);
+      this.envelope.connect(this.envMulAdd);
+      this.envMulAdd.connect(this.gain, 0, 1);
       this.sine.connect(this.reverb);
-      this.reverb.connect(this.crusher);
+      this.reverb.connect(this.gain);
       this.gain.connect(this.outputs[0]);
   };
 
@@ -217,7 +219,7 @@ function forEachNode(callback) {
         var audiolet = this.audiolet;
         var beat = 1;
         var beatCount = 0;
-        var tempo = 0;
+        
         var note = 0;
         var mod = 0;
         var extraBeats = !!(flat.length % 2);
@@ -234,13 +236,21 @@ function forEachNode(callback) {
       var freqPattern2 = new PSequence(flat.slice(chunkSize + 1, chunkSize * 2));
       var freqPattern3 = new PSequence(flat.slice(chunkSize * 2 + 1));
 
-      var beat1 = new PSequence([tempo, tempo, tempo, tempo / 2, tempo / 2], Infinity);
-      var beat2 = new PSequence([tempo / 3, tempo / 3, tempo /3, tempo * 3, tempo * 2, tempo], Infinity);
-      var beat3 = new PSequence([tempo * 2], Infinity);
-      var beat4 = new PSequence([tempo/2], Infinity);
+      var beats = [
+        new PSequence([tempo, tempo, tempo, tempo / 2, tempo / 2], Infinity),
+        new PSequence([tempo / 3, tempo / 3, tempo /3, tempo * 3, tempo * 2, tempo], Infinity),
+        new PSequence([tempo * 2], Infinity),
+        new PSequence([tempo/2], Infinity),
+        new PSequence([tempo/2, tempo/2, tempo, tempo/2, tempo/2, tempo], Infinity),
+        new PSequence([tempo], Infinity),
+        new PSequence([tempo, tempo, tempo, tempo /2], Infinity),
+        new PSequence([tempo /3], Infinity),
+        new PSequence([tempo * 3, tempo /3, tempo /3, tempo /3], Infinity),
+        new PSequence([tempo], Infinity)
+      ];
 
-      var kickBeat = document.title.length % 2 ? beat1 : beat3;
-      var hatBeat = document.title.length % 2 ? beat2 : beat4;
+      var kickBeat = beats[document.title.length % 10];
+      var hatBeat = beats[document.documentURI.length % 10];
 
       scheduler.play([freqPattern], tempo,
         function(info) {
