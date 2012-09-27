@@ -1,4 +1,4 @@
-(function() {
+(function(tab) {
 var tree = { name: "tagName", children: []};
 var flat = [];
 var nodeCount = 0;
@@ -38,11 +38,24 @@ function generateNameValue(name) {
     return val;
 }
 
+function randomColor() {
+  var rint = Math.round(0xffffff * Math.random());
+  return ('#0' + rint.toString(16)).replace(/^#0([0-9a-f]{6})$/i, '#$1');
+}
+
 function buildTagTree(rootElement) {
     var treeElement = {};
     treeElement.name = rootElement.tagName;
     treeElement.nameValue = generateNameValue(treeElement.name);
     treeElement.content = rootElement.innerHTML;
+    treeElement.addBorder = function() {
+      rootElement.style.backgroundColor = randomColor();
+      rootElement.style.border = "1px solid" + randomColor();
+    };
+    treeElement.removeBorder = function() {
+      rootElement.style.backgroundColor = "";
+      rootElement.style.border = "";
+    };
     treeElement.children = [];
     
     for(var i = 0; i < rootElement.childNodes.length; i++) {
@@ -78,7 +91,7 @@ function makeFrequencies() {
   if(document.documentURI.indexOf(".com") === -1) {
     key = "natural minor";
   }
-  
+
   if(document.documentURI.indexOf(".org") !== -1) {
     key = "minor pentatonic";
   }
@@ -124,18 +137,21 @@ var tempo = 0;
                                         frequency);
 
 
-      var release = tempo / (8 - nodeInfo.children.length % 4);
+      var release = tempo / (8 - nodeInfo.children.length % 8);
 
       this.envelope = new PercussiveEnvelope(this.audiolet, 1, 0.1, release, 
         function() {
+            nodeInfo.removeBorder();
             this.audiolet.scheduler.addRelative(0, this.remove.bind(this));
         }.bind(this));
 
-      this.envMulAdd  = new MulAdd(this.audiolet, 0.3, 0);
+      this.envMulAdd  = new MulAdd(this.audiolet, 0.5, 0);
 
       this.filter = new LowPassFilter(this.audiolet, flat.length);
 
       this.reverb = new Reverb(this.audiolet, 0.33, 0.5, 0.5);
+
+      this.upMixer = new UpMixer(audiolet, 2);
 
 
       this.modulator.connect(this.modulatorMulAdd);
@@ -144,7 +160,9 @@ var tempo = 0;
       this.envMulAdd.connect(this.gain, 0, 1);
       this.sine.connect(this.reverb);
       this.reverb.connect(this.gain);
-      this.gain.connect(this.outputs[0]);
+
+      this.gain.connect(this.upMixer);
+      this.upMixer.connect(this.outputs[0]);
   };
 
   var Kick = function(audiolet) {
@@ -262,18 +280,21 @@ var tempo = 0;
 
       scheduler.play([freqPattern], tempo,
         function(info) {
+          info.addBorder();
           var synth = new Synth(audiolet, info);
           synth.connect(audiolet.output);
         }.bind(that));
 
       scheduler.play([freqPattern2], tempo / 2,
         function(info) {
+          info.addBorder();
           var synth = new Synth(audiolet, info);
           synth.connect(audiolet.output);
         }.bind(that));
 
       scheduler.play([freqPattern3], tempo * 2,
         function(info) {
+          info.addBorder();
           var synth = new Synth(audiolet, info);
           synth.connect(audiolet.output);
         }.bind(that));
