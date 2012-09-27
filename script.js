@@ -16,7 +16,7 @@ function findNearestFrequency(find) {
     return freqs[i];
   }
 
-  if(Math.abs(freqs[high] - find) > Math.abs(freqs[low] - find) {
+  if(Math.abs(freqs[high] - find) > Math.abs(freqs[low] - find)) {
     return freqs[low];
   }
 
@@ -26,13 +26,13 @@ function findNearestFrequency(find) {
 function generateNameValue(name) {
     var val = 0;
     
-    if(name === "BR") return val;
+    if(name === "BR" || name === "A") return val;
 
     for(var i = 0; i < name.length; i++) {
         val += name[i].charCodeAt();
     }
 
-    val = findNearestFrequency(val);
+    val = findNearestFrequency(val * 2);
         
     freqsToPlay.push(val);
     return val;
@@ -112,9 +112,10 @@ function forEachNode(callback) {
 
       this.gain = new Gain(this.audiolet);
 
-      var release = nodeInfo.children.length / 5;
+      var release = 0.2 - nodeInfo.children.length / 10;
+      if(this.release < 0.1) release = 0.1;
 
-      this.envelope = new PercussiveEnvelope(this.audiolet, 1, 0.1, release, 
+      this.envelope = new PercussiveEnvelope(this.audiolet, 1, 0.1, 0.2, 
         function() {
             this.audiolet.scheduler.addRelative(0, this.remove.bind(this));
         }.bind(this));
@@ -123,11 +124,16 @@ function forEachNode(callback) {
 
       this.reverb = new Reverb(this.audiolet, 0.33, 0.5, 0.5);
 
+
+        this.crusher = new BitCrusher(this.audiolet, 8);
+
+
       this.modulator.connect(this.modulatorMulAdd);
       this.modulatorMulAdd.connect(this.sine);
       this.envelope.connect(this.gain, 0, 1);
-      this.reverb.connect(this.gain);
+      this.crusher.connect(this.gain);
       this.sine.connect(this.reverb);
+      this.reverb.connect(this.crusher);
       this.gain.connect(this.outputs[0]);
   };
 
@@ -171,23 +177,26 @@ function forEachNode(callback) {
     var Hat = function(audiolet) {
         AudioletGroup.call(this, audiolet, 0, 1);
         // Main sine oscillator
-        this.sine = new Saw(audiolet, 160);
+        this.sine = new WhiteNoise(this.audiolet);
 
         // Gain Envelope
-        this.gainEnv = new PercussiveEnvelope(audiolet, 1, 0.001, 0.1,
+        this.gainEnv = new PercussiveEnvelope(audiolet, 1, 0.01, 0.05,
             function() {
                 // Remove the group ASAP when env is complete
                 this.audiolet.scheduler.addRelative(0,
                                                     this.remove.bind(this));
             }.bind(this)
         );
-        this.gainEnvMulAdd = new MulAdd(audiolet, 0.6);
+        this.gainEnvMulAdd = new MulAdd(audiolet, 0.7);
         this.gain = new Gain(audiolet);
-        this.upMixer = new UpMixer(audiolet, 1);
+        this.filter = new BandPassFilter(audiolet, 3000);
+        this.upMixer = new UpMixer(audiolet, 2);
+
 
 
         // Connect oscillator
-        this.sine.connect(this.gain);
+        this.sine.connect(this.filter);
+        this.filter.connect(this.gain);
 
         // Connect gain envelope
         this.gainEnv.connect(this.gainEnvMulAdd);
@@ -213,9 +222,6 @@ function forEachNode(callback) {
         var mod = 0;
         var extraBeats = !!(flat.length % 2);
         var extraHat = false;
-        var kickBeat = 1;
-        var hatBeat = extraBeats ? 4 : 2;
-
       tempo = flat.length / 3000;
       tempo = 1.5 - tempo * 1.5;
       if (tempo > 2) tempo = 2;
@@ -227,9 +233,14 @@ function forEachNode(callback) {
       var freqPattern = new PSequence(flat.slice(0, chunkSize));
       var freqPattern2 = new PSequence(flat.slice(chunkSize + 1, chunkSize * 2));
       var freqPattern3 = new PSequence(flat.slice(chunkSize * 2 + 1));
-      var drumBeat = new PChoose([new PSequence([tempo * 4, tempo, tempo, tempo * 2]),
-                                   new PSequence([tempo * 2, tempo * 2, tempo, tempo * 3]),
-                                   new PSequence([tempo, tempo, tempo, tempo])], Infinity);
+
+      var beat1 = new PSequence([tempo, tempo, tempo, tempo / 2, tempo / 2], Infinity);
+      var beat2 = new PSequence([tempo / 3, tempo / 3, tempo /3, tempo * 3, tempo * 2, tempo], Infinity);
+      var beat3 = new PSequence([tempo * 2], Infinity);
+      var beat4 = new PSequence([tempo/2], Infinity);
+
+      var kickBeat = document.title.length % 2 ? beat1 : beat3;
+      var hatBeat = document.title.length % 2 ? beat2 : beat4;
 
       scheduler.play([freqPattern], tempo,
         function(info) {
@@ -249,47 +260,17 @@ function forEachNode(callback) {
           synth.connect(audiolet.output);
         }.bind(that));
 
-      scheduler.play([], tempo,
+      scheduler.play([], kickBeat,
         function() {
           var kick = new Kick(audiolet);
           kick.connect(audiolet.output);
         }.bind(that));
 
-      scheduler.play([], tempo * 2,
+      scheduler.play([], hatBeat,
         function() {
           var hat = new Hat(audiolet);
           hat.connect(audiolet.output);
         }.bind(that));
-
-/*
-      forEachNode(function(nodeInfo) {
-        beat += tempo;
-        beatCount++;
-
-        scheduler.addAbsolute(beat, function() {
-            // var synth = new Synth(audiolet, nodeInfo);
-            //synth.connect(audiolet.output);
-        }.bind(that));
-
-        if(beatCount % kickBeat === 0) {
-          scheduler.addAbsolute(beat + mod, function() {
-            // var kick = new Kick(audiolet);
-            //kick.connect(audiolet.output);
-          }.bind(that));
-        }
-
-        if(beatCount % hatBeat === 0 || extraHat) {
-          if(extraBeats) extraHat = !extraHat;
-           scheduler.addAbsolute(beat + mod, function() {
-            // var hat = new Hat(audiolet);
-            // hat.connect(audiolet.output);
-          }.bind(that));
-        }
-
-        mod = mod * -1;
-
-      });
-*/
     };
 
     window.audioletApp = new AudioletApp();
